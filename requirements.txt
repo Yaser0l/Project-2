@@ -1,0 +1,12 @@
+# Google ADK Core
+google-genai
+google-adk
+
+# Database
+psycopg2-binary
+
+# HTTP Requests
+requests
+
+# Environment Variables
+python-dotenv
