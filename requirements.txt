@@ -2,6 +2,10 @@
 google-genai
 google-adk
 
+# Web Framework
+flask
+flask-socketio
+
 # Database
 psycopg2-binary
 

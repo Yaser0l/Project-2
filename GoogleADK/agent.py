@@ -770,7 +770,7 @@ if __name__ == "__main__":
     async def main():
         runner = InMemoryRunner(agent=root_agent, app_name="BookAgent")
         session = await runner.session_service.create_session(app_name="BookAgent", user_id="user1")
-        
+
         logger.info("💬 Chat session started")
         print("Chat started! Type 'exit' to quit.")
         while True:
@@ -778,27 +778,22 @@ if __name__ == "__main__":
             if user_input.lower() == "exit":
                 logger.info("💬 Chat session ended")
                 break
-            
+
             logger.info(f"👤 [USER INPUT] {user_input}")
-            logger.info("🚀 Starting agent processing (Manager will validate via guardrail)...")
-            
-            # Manager agent will handle guardrail validation internally
+            logger.info("🚀 Starting agent processing...")
+
             message = Content(role="user", parts=[Part(text=user_input)])
             try:
                 final_response = None
                 async for event in runner.run_async(user_id="user1", session_id=session.id, new_message=message):
-                    # Only capture text responses
                     if event.content and event.content.parts:
                         for part in event.content.parts:
                             if hasattr(part, 'text') and part.text and part.text.strip():
                                 text = part.text.strip()
-                                # Skip internal debugging messages
                                 if not text.startswith("For context:") and not text.startswith("["):
-                                    # Always update with latest response (Manager's will be last)
                                     final_response = text
                                 break
-                
-                # Print the final response (which will be from Manager after sub-agent completes)
+
                 if final_response:
                     logger.info("✅ Agent processing complete")
                     print(f"Agent: {final_response}")
