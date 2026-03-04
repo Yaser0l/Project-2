@@ -6,12 +6,22 @@
     <title>Google ADK Agent</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Book Agents System </h1>
+            <div class="header-actions">
+                <div class="status-indicator">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">Connecting...</span>
+                </div>
+                <button class="clear-btn" onclick="clearChat()">&#x1F5D1; Clear Chat</button>
+            </div>
+            <h1><i class="fa-solid fa-book-open"></i> Book Agents System</h1>
             <p>Your intelligent assistant for SQL query and book predictions powered by Google ADK</p>
         </div>
         <div class="chat-container" id="chatContainer">
@@ -19,7 +29,7 @@
         </div>
         <div class="input-container">
             <div class="input-group">
-                <input type="text" id="userInput" placeholder="Type your message here..." autocomplete="off">
+                <textarea id="userInput" placeholder="Type your message here..." autocomplete="off" rows="1"></textarea>
                 <button id="sendBtn" onclick="sendMessage()">Send</button>
             </div>
         </div>

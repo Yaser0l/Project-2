@@ -33,32 +33,28 @@ app = Flask(__name__, static_folder='static')
 # WebSocket server — threading mode lets each handler run its own asyncio loop
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
-# Global variables for agent runner and session
+# Global runner (shared) + per-socket sessions
 runner = None
-session = None
+sessions: dict = {}  # sid -> session
 
 async def initialize_agent():
-    """Initialize the ADK runner and session"""
-    global runner, session
+    """Initialize the ADK runner (sessions are created per WebSocket connection)"""
+    global runner
     logger.info("🚀 Initializing Google ADK agents...")
     runner = InMemoryRunner(agent=root_agent, app_name="BookAgent")
-    session = await runner.session_service.create_session(
-        app_name="BookAgent", 
-        user_id="user1"
-    )
     logger.info("✅ Agents initialized successfully")
 
-async def process_message(user_input: str) -> str:
+async def process_message(user_input: str, session_id: str, user_id: str) -> str:
     """
     Process a user message through the Google ADK agent (non-streaming, used by REST endpoint).
     """
-    global runner, session
+    global runner
     message = Content(role="user", parts=[Part(text=user_input)])
     final_response = None
     try:
         async for event in runner.run_async(
-            user_id="user1",
-            session_id=session.id,
+            user_id=user_id,
+            session_id=session_id,
             new_message=message
         ):
             if event.content and event.content.parts:
@@ -91,7 +87,13 @@ async def stream_message(sid: str, user_input: str) -> None:
       into small word-groups and emit them with tiny async delays — real multiple
       WebSocket messages that the client receives and renders one by one.
     """
-    global runner, session
+    global runner
+
+    session = sessions.get(sid)
+    if not session:
+        logger.error(f"❌ No session for {sid}")
+        socketio.emit("chat_error", {"error": "Session not found. Please refresh."}, to=sid)
+        return
 
     run_config = RunConfig(streaming_mode=StreamingMode.SSE)
     message = Content(role="user", parts=[Part(text=user_input)])
@@ -110,21 +112,31 @@ async def stream_message(sid: str, user_input: str) -> None:
 
     try:
         async for event in runner.run_async(
-            user_id="user1",
+            user_id=sid,
             session_id=session.id,
             new_message=message,
             run_config=run_config,
         ):
+            author = getattr(event, "author", None)
+            is_manager = author == "Manager"
+
             if not event.content or not event.content.parts:
                 continue
 
-            is_partial = getattr(event, "partial", False)
-            is_manager = getattr(event, "author", None) == "Manager"
+            # If Manager is making a function/tool call, broadcast which
+            # sub-agent/tool it's invoking so the thinking bubble updates.
+            if is_manager:
+                for part in event.content.parts:
+                    fc = getattr(part, "function_call", None)
+                    if fc and getattr(fc, "name", None):
+                        logger.info(f"🔧 [WS] Manager calling tool: {fc.name}")
+                        socketio.emit("chat_status", {"agent": fc.name}, to=sid)
+                        break
 
-            # Only handle Manager events — sub-agent events would duplicate
-            # whatever the Manager relays to the user.
             if not is_manager:
                 continue
+
+            is_partial = getattr(event, "partial", False)
 
             for part in event.content.parts:
                 if not (hasattr(part, "text") and part.text and part.text.strip()):
@@ -162,13 +174,30 @@ async def stream_message(sid: str, user_input: str) -> None:
 
 @socketio.on("connect")
 def on_connect():
-    logger.info(f"🔌 [WS] Client connected: {request.sid}")
+    sid = request.sid
+    logger.info(f"🔌 [WS] Client connected: {sid}")
+    # Create a dedicated session for this connection
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        session = loop.run_until_complete(
+            runner.session_service.create_session(
+                app_name="BookAgent",
+                user_id=sid
+            )
+        )
+        sessions[sid] = session
+        logger.info(f"📋 [WS] Session created for {sid}: {session.id}")
+    finally:
+        loop.close()
     ws_emit("connected", {"status": "connected"})
 
 
 @socketio.on("disconnect")
 def on_disconnect():
-    logger.info(f"🔌 [WS] Client disconnected: {request.sid}")
+    sid = request.sid
+    sessions.pop(sid, None)
+    logger.info(f"🔌 [WS] Client disconnected: {sid} — session removed")
 
 
 @socketio.on("chat_message")
@@ -259,8 +288,17 @@ def chat():
         sanitized_input = validation['sanitized_input']
         logger.info("🤖 Processing with agent...")
         
-        # Run agent asynchronously
-        response_text = asyncio.run(process_message(sanitized_input))
+        # Run agent asynchronously with a temporary REST session
+        loop = asyncio.new_event_loop()
+        try:
+            tmp_session = loop.run_until_complete(
+                runner.session_service.create_session(app_name="BookAgent", user_id="rest_user")
+            )
+            response_text = loop.run_until_complete(
+                process_message(sanitized_input, tmp_session.id, "rest_user")
+            )
+        finally:
+            loop.close()
         
         logger.info(f"✅ Response generated: {response_text[:100]}...")
         

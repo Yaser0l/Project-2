@@ -6,7 +6,7 @@
 
 /GoogleADK/.adk
 /GoogleADK/__pycache__
-
+/GoogleADK/agents/__pycache__
 /RAG
 
 /highlighted_outputs
