@@ -3,3 +3,6 @@ README.md
 /n8n_data
 /highlighted_outputs
 /RAG
+GoogleADK/__pycache__
+GoogleADK/.env
+.env

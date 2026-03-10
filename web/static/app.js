@@ -59,7 +59,9 @@ function startTicker() {
             streamingText = '';
         }
         streamingText += word;
-        streamingBubble.querySelector('.message-content').innerHTML = marked.parse(streamingText);
+        // Ensure inline numbered list items are on their own lines before parsing
+        const mdText = streamingText.replace(/ (\d+)\. /g, '\n\n$1. ');
+        streamingBubble.querySelector('.message-content').innerHTML = marked.parse(mdText);
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }, RENDER_INTERVAL_MS);
 }
@@ -75,7 +77,6 @@ function stopTicker() {
     streamingText = '';
     sendBtn.disabled = false;
     userInput.focus();
-    saveChat();
 }
 
 function resetBuffer() {
@@ -119,6 +120,8 @@ socket.on('chat_status', ({ agent }) => {
 });
 
 socket.on('chat_done', () => {
+    // Always clear the thinking bubble — it may still be showing if no chunks arrived
+    removeThinking();
     // Signal the ticker to stop once the buffer is empty
     streamDone = true;
     if (wordBuffer.length === 0 && !renderTicker) stopTicker();
@@ -132,36 +135,10 @@ socket.on('chat_error', ({ error }) => {
     userInput.focus();
 });
 
-// ── localStorage persistence ─────────────────────────────
-const STORAGE_KEY = 'bookagent_chat';
-
-function saveChat() {
-    const messages = [];
-    chatContainer.querySelectorAll('.message:not(.typing-indicator)').forEach(el => {
-        const type = el.classList.contains('user') ? 'user' : el.classList.contains('error') ? 'error' : 'assistant';
-        const content = el.querySelector('.message-content').innerText;
-        const time = el.querySelector('.message-time')?.textContent || '';
-        messages.push({ type, content, time });
-    });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-}
-
-function loadChat() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return false;
-    try {
-        const messages = JSON.parse(saved);
-        if (!messages.length) return false;
-        messages.forEach(({ type, content, time }) => addMessage(content, type, time));
-        return true;
-    } catch { return false; }
-}
-
 // ── UI helpers ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', function() {
-    if (!loadChat()) {
-        addMessage('👋 Hello! I\'m your Google ADK agent. How can I help you today?', 'assistant');
-    }
+    // Do not persist chat history between app restarts/page reloads.
+    addMessage('👋 Hello! I\'m your Google ADK agent. How can I help you today?', 'assistant');
 });
 
 userInput.addEventListener('keypress', function(e) {
@@ -225,7 +202,6 @@ function addMessage(content, type = 'assistant', existingTime = null) {
 // ── Send via WebSocket ───────────────────────────────────
 function clearChat() {
     chatContainer.innerHTML = '';
-    localStorage.removeItem(STORAGE_KEY);
     addMessage('👋 Hello! I\'m your Google ADK agent. How can I help you today?', 'assistant');
 }
 
@@ -234,7 +210,6 @@ function sendMessage() {
     if (!message || sendBtn.disabled) return;
 
     addMessage(message, 'user');
-    saveChat();
     userInput.value = '';
     userInput.style.height = 'auto';
     userInput.classList.remove('scrollable');

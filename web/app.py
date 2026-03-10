@@ -99,6 +99,7 @@ async def stream_message(sid: str, user_input: str) -> None:
     message = Content(role="user", parts=[Part(text=user_input)])
 
     partial_streamed = False
+    content_sent = False  # tracks whether any text was ever emitted to the client
 
     async def emit_words(text: str, words_per_chunk: int = 3, delay: float = 0.04):
         """Break text into small word-groups, emitting each as a separate WS message."""
@@ -150,13 +151,19 @@ async def stream_message(sid: str, user_input: str) -> None:
                     logger.info(f"📡 [WS] partial → {sid}: {text[:60]}...")
                     socketio.emit("chat_chunk", {"chunk": text}, to=sid)
                     partial_streamed = True
+                    content_sent = True
                 elif not partial_streamed:
                     # Single-block relay: stream word-by-word over WebSocket
                     logger.info(f"📡 [WS] word-streaming → {sid}: {text[:60]}...")
                     await emit_words(text)
-                # else: final event after partials — already fully sent, skip
+                    partial_streamed = True  # block any subsequent complete events from re-streaming
+                    content_sent = True
+                # else: already fully sent, skip
                 break
 
+        if not content_sent:
+            logger.warning(f"⚠️ [WS] No content generated for {sid} — sending fallback")
+            socketio.emit("chat_chunk", {"chunk": "I couldn't generate a response. Please try again."}, to=sid)
         socketio.emit("chat_done", {}, to=sid)
         logger.info(f"✅ [WS] stream complete for {sid}")
 

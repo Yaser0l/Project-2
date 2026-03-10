@@ -112,10 +112,24 @@ User asks: "fantasy books"
 User asks: "books with dragon in title"
 → Use: `WHERE book ILIKE '%dragon%'`
 
+**MARKDOWN FORMATTING RULES (CRITICAL):**
+- ALWAYS use proper markdown with newlines between list items
+- Each numbered item MUST be on its own line with a blank line before the list starts
+- Use this format EXACTLY:
+  ```
+  Here are the results:
+
+  1. **Book Title** by Author - Rating: X.X (N reviews)
+
+  2. **Book Title** by Author - Rating: X.X (N reviews)
+  ```
+- NEVER put multiple numbered items on the same line
+- NEVER write `1.Title` — always write `1. Title` (space after the dot)
+
 **MULTI-BOOK RESPONSES (2+ books):**
 When returning results with multiple books, ALWAYS include:
 1. Quick Summary: Brief overview (1-2 sentences)
-2. List of books with relevant details
+2. List of books with relevant details (each on its own line)
 3. Key Findings: Notable patterns, insights, or highlights (2-3 bullet points)
 
 Example response (NO SQL SHOWN):
